@@ -384,4 +384,44 @@ cancer2ww %>% ggplot(
   scale_alpha_manual(values = c(0.5, 0.75, 1)) +
   theme(legend.position = "top", 
         legend.title = element_blank())
+
+qic_chart <- qicharts2::qic(
+  y = pct_2ww,
+  x = Effective_Snapshot_Date,
+  data  = cancer2ww %>% filter(TLHC_CCG == ccg_name),
+  chart = "i"
+)
+
+use <- qic_chart[["data"]]
+
+use %>% ggplot(aes(x, y.sum)) +
+  geom_rect(
+    data = use[1, ],
+    aes(ymin = unique(use$lcl), ymax = unique(use$ucl)), 
+    xmin = -Inf,
+    xmax = Inf,
+    fill = "cadetblue3",
+    linetype = 0,
+    alpha = 0.5
+  ) +
+  geom_hline(yintercept = unique(use$ucl), colour = "cadetblue3") +
+  geom_hline(yintercept = unique(use$lcl), colour = "cadetblue3") +
+  geom_hline(yintercept = unique(use$cl), colour = "red", linetype = "dashed") +
+  geom_point(aes(colour = sigma.signal)) +
+  geom_line() +
+  annotate("text", label = "UCL", x = max(use$x), y = unique(use$ucl), hjust = -1.1) +
+  annotate("text", label = "LCL", x = max(use$x), y = unique(use$lcl), hjust = -1.25) +
+  annotate("text", label = "CL", x = max(use$x), y = unique(use$cl), hjust = -1.65) +
+  labs(y = "Percentage of Patients Seen Within Two Weeks",
+       x = "Month",
+       title = paste0(ccg_name, " CCG SPC chart")) +
+  theme(
+    axis.title.y = element_text(margin = margin(t = 0, r = 8, b = 0, l = 0)),
+    text = element_text(size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none",
+    plot.margin = unit(c(0, 2, 0, 0), "cm")
+  ) +
+  scale_y_continuous(labels = function(x) paste0(x, "%")) +
+  coord_cartesian(clip = "off")
 }

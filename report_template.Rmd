@@ -1,0 +1,461 @@
+---
+title: Regional Targeted Lung Health Checks Programme Report for `r tlhc_ccg` CCG
+output:
+  pdf_document:
+    toc: true
+    latex_engine: lualatex
+    includes:
+      in_header: mystyles.tex
+  html_document:
+    df_print: paged
+mainfont: Segoe UI
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(patchwork)
+library(kableExtra)
+library(zoo)
+library(magrittr)
+load("workspace.RData")
+
+options(scipen = 999)
+```
+
+## Executive Summary
+
+As of September 2023, `r patient_measurements %>% filter(CCG == tlhc_ccg) %>% pull(invited)` eligible patients have been invited for the TLHC in `r paste0(tlhc_ccg)`, with `r patient_measurements %>% filter(CCG == tlhc_ccg) %>% pull(accepted)` having accepted the invitation, and `r patient_measurements %>% filter(CCG == tlhc_ccg) %>% pull(attended)` having attended a Lung Health Check.
+
+## Patient Demographics and Key Clinical Measurements
+
+```{r foobar, echo = F}
+
+options(knitr.kable.NA = '')
+
+moo <-
+  patient_measurements %>% filter(CCG == tlhc_ccg) %>% select(
+    -ends_with("avg_height"),
+    -ends_with("avg_weight"),
+    -starts_with("bp"),
+    -invited,
+    -accepted,
+    -starts_with("ldct"),
+    -CCG
+  ) %>% select("attended",
+               "avg_Age",
+               "no_Men",
+               "no_Women",
+               "Median_IMD_rank",
+               everything()) %>%
+  pivot_longer(cols = everything(),
+               names_to = "Variable",
+               values_to = "Attended Patients")
+
+moo[moo$Variable == "attended", "Variable"] <- "No of attendees"
+moo[moo$Variable == "avg_Age", "Variable"] <- "Mean age"
+moo[moo$Variable == "Median_IMD_rank", "Variable"] <- "Median IMD rank"
+moo[moo$Variable == "no_Men", "Variable"] <- "No of men"
+moo[moo$Variable == "no_Women", "Variable"] <- "No of women"
+moo[moo$Variable == "men_bmi", "Variable"] <- "BMI of men"
+moo[moo$Variable == "women_bmi", "Variable"] <- "BMI of women"
+moo[moo$Variable == "PLCO", "Variable"] <- "Lung cancer risk (PLCO\\textsubscript{M2012})"
+
+attended_value <- moo %>% filter(Variable == "No of attendees") %>% pull("Attended Patients")
+
+moo <- moo %>% mutate(
+  groupings = case_when(
+    Variable %in% c("No of men", "No of women") ~ "Sex",
+    Variable %in% c(
+      "Less than 'O' level",
+      "'O' level",
+      "'A' level",
+      "University/college",
+      "University degree",
+      "Postgraduate/professional"
+    ) ~ "Education",
+    Variable %in% c("Current Smoker", "Former Smoker") ~ "SmokingStatus",
+    Variable %in% c("MRC_DS_1", "MRC_DS_2", "MRC_DS_3", "MRC_DS_4", "MRC_DS_5") ~ "MRCDyspnoeaScore",
+    Variable %in% c("PS_0", "PS_1", "PS_2", "PS_3", "PS_4") ~ "PerformanceStatus",
+    TRUE ~ Variable
+  )
+) %>% group_by(groupings) %>% mutate(pct = case_when(
+  n() > 1 ~ round(`Attended Patients` / sum(`Attended Patients`) * 100, 1),
+  Variable %in% c(
+    "Airflow obstruction, yes (%)",
+    "COPD/emphysema, yes (%)",
+    "FH lung cancer, yes (%)"
+  ) ~ round(`Attended Patients` / attended_value * 100, 1),
+  TRUE ~ NA_real_
+)) ## create pct
+
+moo <- moo %>% mutate_at(vars("Attended Patients"), prettyNum) %>%
+  mutate_at(vars("pct"), as.character) %>%
+  mutate_at(vars("pct"), ~str_c("(", ., ")")) %>%
+  unite(col = "Attended Patients", "Attended Patients", "pct", sep = " ") %>%
+  mutate_at(vars("Attended Patients"), str_replace_all, pattern = " NA", replacement = "") %>%
+  ungroup %>% select(-groupings) ## mutate pcts for relevant grouped vars
+
+moo_final <- left_join(moo, moo_complete, by = "Variable")
+
+rif <- function(x) which(moo_final$Variable == x)
+
+moo_final$Variable %<>% str_replace_all("~", "")
+moo_final$Variable %<>% str_replace_all("FEV1", "FEV\\\\textsubscript{1}")
+
+moo_final %>% kable(booktabs = T, format = "latex") %>%
+kable_styling(latex_options = "striped") %>%
+pack_rows("Sex (%)", rif("No of men"), rif("No of women")) %>%
+pack_rows("BMI", rif("BMI of men"), rif("BMI of women")) %>%
+pack_rows("Education (%)", rif("Less than 'O' level"), rif("Postgraduate/professional")) %>%
+pack_rows("Smoking status (%)", rif("Current Smoker"), rif("Former Smoker")) %>%
+pack_rows("Smoking exposure", rif("Duration (years)"), rif("Pack-years")) %>%
+pack_rows("Spirometry", rif("FEV\\textsubscript{1}"), rif("FEV\\textsubscript{1}:FVC ratio")) %>%
+pack_rows("MRC Dyspnoea Score (%)", rif("MRC_DS_1"), rif("MRC_DS_5")) %>%
+pack_rows("Performance status (%)", rif("PS_0"), rif("PS_4"))
+```
+
+## Yearly Incidence Rate per 100,000 persons (standardised by age and sex)
+
+## Monthly Figures of Accepted Invitations, Attended Acceptions, and Attended Invitations
+
+```{r aggregate_summary, fig.width = 9, fig.height = 6, echo = F}
+x_list[["collate_pivot"]] %>% filter(name == tlhc_ccg, metric %in% c("invited", "accepted", "attended")) %>% ggplot(aes(Month, value, fill = metric)) + 
+  geom_bar(stat = "identity", position = "dodge") + 
+  facet_wrap("metric") +
+  scale_x_yearmon()
+
+```
+
+<center>
+```{r aggregate_summary_table, fig.align = 'center', echo = F}
+# moop <- x_list[["collate"]] %>% select(Month, `Mansfield and Ashfield with Corby`, metric) %>% pivot_wider(names_from = Month, values_from = `Mansfield and Ashfield with Corby`)
+# 
+# length_of_moop <- length(moop)
+# from <- c(1, ceiling((length_of_moop/2)+1))
+# to <- c(floor(from[2]-1), length_of_moop)
+# 
+# 
+# knitr::kable(moop[, from[1]:to[1]]) %>%
+#   kable_styling(
+#     bootstrap_options = "striped",
+#     full_width = T,
+#     font_size = 9,
+#     position = "center"
+#   )
+# 
+# knitr::kable(moop[, c(from[2]:to[2])]) %>%
+#   kable_styling(
+#     bootstrap_options = "striped",
+#     full_width = F,
+#     font_size = 9,
+#     position = "center"
+#   )
+
+```
+</center>
+
+## Percentage of Patients who Accepted an Invitation over Programme, Attended an Acception, and Attended an Invitation
+
+```{r drilldown_plots, fig.width = 6, fig.height = 9, fig.align = 'center', echo = F, warning = F}
+moo_list <- list()
+
+quick_function <- function(ccg, metric, metric_3ml, y_label, legend_label){
+x_list[["indiv_ccg"]][[ccg]] %>% pivot_longer(acceptedOinv:attendedOacc_3ml) %>% filter(name %in% c(metric, metric_3ml)) %>% ggplot(aes(Month, value, colour = name)) +
+  geom_line() +
+  geom_point() +
+  labs(y = y_label) +
+  scale_colour_brewer(palette = "Set1",
+                      labels = c(legend_label,
+                                   "3 Month Rolling Average"),
+                      name = element_blank()) +
+  theme_bw() +
+  theme(legend.position = "top")
+}
+
+moo_list[["accOinv"]] <- quick_function(tlhc_ccg,
+                                      "acceptedOinv", "acceptedOinv_3ml",
+                                      "Percentage of Invited Patients",
+                                      "Invited Patients who Accepted")
+moo_list[["attOacc"]] <- quick_function(tlhc_ccg,
+                                      "attendedOacc", "attendedOacc_3ml",
+                                      "Percentage of Accepted Patients",
+                                      "Accepted Patients who Attended")
+moo_list[["attOinv"]] <- quick_function(tlhc_ccg,
+                                      "attendedOinv", "attendedOinv_3ml",
+                                      "Percentage of Accepted Patients",
+                                      "Invited Patients who Attended")
+
+moo_list[["accOinv"]] / moo_list[["attOacc"]] / moo_list[["attOinv"]]
+
+```
+
+## New Cumulative Plots ####
+
+```{r cumplots, fig.width = 7, fig.height = 10, fig.align = 'center', echo = F, warning = F}
+
+cumplot_function <- function(variable_to_gather, ccg, y_label) {
+  
+  foobar <- x_list[["indiv_ccg_cum"]] %>% map(~ .x %>% select(Month, variable_to_gather)) %>% bind_rows(.id = "CCG") %>%
+    rename("moo" = !!sym(variable_to_gather)) %>%
+    mutate(
+      colour_this = case_when(CCG == ccg ~ ccg,
+                              TRUE ~ "Other TLHC CCG"),
+      for_label = case_when(
+        Month == max(Month) &
+          moo == min(moo[Month == max(Month)]) ~ CCG,
+        Month == max(Month) &
+          moo == max(moo[Month == max(Month)]) ~ CCG,
+        TRUE ~ "Other"
+      )
+    ) 
+  
+  foobar %>% ggplot(aes(
+      Month,
+      moo,
+      colour = colour_this,
+      fill = CCG,
+      alpha = colour_this,
+      label = str_wrap(for_label, 15)
+    )) +
+    geom_line() +
+    geom_point() +
+    theme_bw() +
+    theme(
+      legend.position = "top",
+      legend.title = element_blank(),
+      plot.margin = margin(b = 30, unit = "pt")
+    ) +
+    labs(y = y_label,
+         caption = paste0(
+           "Current highest performing CCG is ",
+           foobar %>% filter(Month == max(Month), moo == max(moo[Month == max(Month)])) %>% pull(for_label),
+           " with ",
+           foobar %>% filter(Month == max(Month), moo == max(moo[Month == max(Month)])) %>% pull(moo),
+           "%.\n", 
+           "Current lowest performing CCG is ",
+           foobar %>% filter(Month == max(Month), moo == min(moo[Month == max(Month)])) %>% pull(for_label),
+           " with ",
+           foobar %>% filter(Month == max(Month), moo == min(moo[Month == max(Month)])) %>% pull(moo),
+           "%."
+         )) +
+    scale_color_manual(values = c("darkgoldenrod1", "grey70")) +
+    scale_alpha_manual(values = c(1, 0.4)) +
+    guides(fill = F) +
+    coord_cartesian(clip = "off")
+}
+
+plot1 <- cumplot_function("acceptedOinv", tlhc_ccg, "Cumulative % of Accepted\nPatients who were Invited")
+
+plot2 <- cumplot_function("attendedOinv", tlhc_ccg, "Cumulative % of Attended\nPatients who were Invited")
+
+plot3 <- cumplot_function("attendedOacc", tlhc_ccg, "Cumulative % of Attended\nPatients who Accepted an Invitation")
+
+plot1 / plot2 / plot3 + plot_layout(guides = 'collect') &
+  theme(legend.position = 'top')
+
+```
+
+## Cumulative Acceptances vs Projections
+
+```{r cum_acceptances, fig.width = 9, fig.height = 5, echo = F, warning = F}
+
+zoop <- bind_cols(Month = x$Month, Attended_Cum = x_list[["attended_cum"]][,tlhc_ccg], "Attended_Cum_Projections" = projections[,"projection"])
+zoop %<>% pivot_longer(2:3, names_to = "Line", values_to = "No_Patients")
+
+zoop %>% filter(Month < "2021-04-01") %>% ggplot(aes(Month, No_Patients, colour = Line)) +
+  geom_line(aes(linetype=Line)) +
+  scale_colour_discrete(labels = c(tlhc_ccg, "Planned Activity")) +
+  scale_linetype(guide = F)
+
+```
+
+
+## Numbers referred to LDCT scan, and number of scans performed
+
+```{r ldct, fig.width = 9, fig.height = 5, fig.align = 'center', echo = F, warning = F}
+merge(x_list[["ldct_referrals"]] %>% select(Month, tlhc_ccg),
+      x_list[["ldct_scans"]] %>% select(Month, tlhc_ccg),
+      by = "Month",
+      suffixes = c("_referrals", "_scans")) %>% pivot_longer(cols = 2:3, names_prefix = paste0(tlhc_ccg,"_"), names_to = "Measure", values_to = "Number") %>% ggplot(aes(Month, Number, colour = Measure)) +
+  geom_line(stat = "identity") +
+  geom_point() +
+  labs(y = "Number of Patients") +
+  scale_colour_brewer(palette = "Set1") +
+  theme_bw()
+```
+
+## Number Offered, Taking Up, and Completed Smoking Cessation Course
+
+```{r smoking, echo = F, fig.width = 9, fig.height = 5, fig.align = 'center'}
+smoke <- x_list[which(
+  names(x_list) %in% c(
+    "offered_smokecess",
+    "takeup_smokecess",
+    "completed_smokecess"
+  )
+)] %>% map(~ pivot_longer(.x, cols = -Month, names_to = "CCG", values_to = "No_Patients")) %>% bind_rows(.id = "metric") %>% filter(CCG == tlhc_ccg)
+
+smoke %>% ggplot(aes(Month, No_Patients, colour = metric)) +
+  geom_line(stat = "identity") +
+  labs(y = "Number of Patients") +
+  scale_colour_brewer(palette = "Set1") +
+  theme_bw()
+
+summarise1 <- smoke %>% mutate_at(vars("metric"), as_factor) %>% group_by(metric) %>% summarise(new = sum(No_Patients))
+summarise2 <- summarise1 %>% pivot_wider(id_cols = metric, names_from = metric, values_from = new) %>% summarise(takeupOoffered = (takeup_smokecess/offered_smokecess)*100,
+                                                                                                                                                         completedOoffered = (completed_smokecess/offered_smokecess)*100,
+                                                                                                                                                         completedOtakeup = (completed_smokecess/takeup_smokecess)*100) %>% pivot_longer(cols = everything())
+
+
+(summarise1 %>% ggplot(aes(metric, new)) + 
+    geom_bar(stat = "identity") +
+    theme_bw()) + 
+  (summarise2 %>% ggplot(aes(name, value)) + 
+     geom_col() +
+     theme_bw())
+```
+
+## Funnel Plot
+
+```{r funnel_plots, fig.width = 9, fig.height = 7, echo = F, warning = F, message = F}
+library(funnelR)
+
+vosz <- x_list[["accepted_cum"]] %>% pivot_longer(cols = -"Month", values_to = "d") %>% left_join(
+  x_list[["attended_cum"]] %>% pivot_longer(cols = -"Month", values_to = "n")
+) %>% group_by(Month) %>% mutate(avg = sum(n)/sum(d))
+
+vosz_filter <- vosz %>% filter(Month == "2020-07-01") %>% mutate(id = 1:n())
+
+vosz_filter <- funscore(vosz_filter,
+                        benchmark = vosz_filter %>% pull(avg) %>% unique(),
+                        alpha = 0.8,
+                        alpha2 = 0.95,
+                        method = "approximate")
+
+vosz_filter %<>% mutate(ccg_grouping = case_when(ccg_group = name == tlhc_ccg ~ tlhc_ccg, 
+                                                   TRUE ~ "Other TLHC CCG"))
+
+vosz_limits <- fundata(vosz_filter,
+                       benchmark = vosz_filter %>% pull(avg) %>% unique(),
+                       alpha = 0.8,
+                       alpha2 = 0.95,
+                       method = "approximate",
+                       step = 1)
+
+funplotv2 <- function (input, fundata, byvar) 
+{
+  gra <- ggplot(data = input, aes(x = input$d, y = input$n/input$d)) + 
+    geom_line(data = fundata, aes(x = fundata$d, y = fundata$up), 
+              colour = "orange") + geom_line(data = fundata, 
+                                             aes(x = fundata$d, y = fundata$lo), colour = "orange") + 
+    geom_line(data = fundata, aes(x = fundata$d, y = fundata$up2), 
+              colour = "blue") + geom_line(data = fundata, 
+                                           aes(x = fundata$d, y = fundata$lo2), colour = "blue") + 
+    geom_hline(data = fundata, aes(yintercept = fundata$benchmark), 
+               colour = "red") + coord_cartesian(ylim = c(0, 
+                                                          1)) + scale_y_continuous(breaks = seq(0, 1, 0.1)) + theme_bw()
+  if (missing(byvar)) {
+    gra <- gra + geom_point(data = input, size = 4.5, pch=21, colour = "black")
+    return(gra)
+  }
+  else {
+    gra <- gra + geom_point(data = input, size = 4.5, pch=21, colour = "black", aes_string(fill = byvar))
+    return(gra)
+  }
+}
+
+
+coo <- funplotv2(input=vosz_filter, 
+          fundata=vosz_limits,
+          byvar="ccg_grouping")
+
+coo[["data"]] %<>% mutate(rank = rank(-r))
+
+coo +
+theme_bw() +
+  scale_fill_brewer(name = "CCG", palette = "Set3") +
+  scale_x_continuous(breaks = function(x) seq(x[1], x[2], 1000) %>% round(-3)) +
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) +
+  coord_cartesian(ylim = c(0.6, 0.8)) +
+  theme(legend.position = "bottom") +
+  labs(y = "Proportion of Cumulative Attendeds to Cumulative Accepteds",
+       x = "Cumulative Accepteds", 
+       caption = "Red line represents programme average.\nYellow lines represent 80% confidence limits.\nBlue lines represent 95% confidence limits.")
+
+
+
+funnel_text <- list(extreme = vector("list", 3) %>% setNames(c("ccg", "d", "uplow")),
+                    moderate = vector("list", 3) %>% setNames(c("ccg", "d", "uplow"))
+)
+
+for (ccg in coo[["data"]][["name"]]) {
+  if (coo[["data"]] %>% filter(name == ccg) %>% pull(score2) == "Extreme") {
+    x <- coo[["data"]] %>% filter(name == ccg)
+    funnel_text[["extreme"]][["ccg"]] %<>% c(x[["name"]])
+    funnel_text[["extreme"]][["d"]] %<>% c(x[["d"]])
+    funnel_text[["extreme"]][["uplow"]] %<>% c(if (x$r > x$avg) "upper" else "lower")
+  } else if (coo[["data"]] %>% filter(name == ccg) %>% pull(score2) != "Extreme" & 
+             coo[["data"]] %>% filter(name == ccg) %>% pull(score) == "Extreme") {
+    funnel_text[["moderate"]][["ccg"]] <- c(x[["name"]])
+    funnel_text[["moderate"]][["d"]] <- c(x[["d"]])
+    funnel_text[["moderate"]][["uplow"]] %<>% c(if (x$r > x$avg) "upper" else "lower")
+  }
+}
+
+
+```
+
+
+`r paste0(tlhc_ccg, " CCG ", if (coo[["data"]][coo[["data"]]$name == tlhc_ccg,]$score == "In Control") {"is within 80% control limits "} else if (coo[["data"]][coo[["data"]]$name == tlhc_ccg,]$score2 == "Extreme") {"is beyond 95% control limits "} else if (coo[["data"]][coo[["data"]]$name == tlhc_ccg,]$score2 != "Extreme" & coo[["data"]][coo[["data"]]$name == tlhc_ccg,]$score == "Extreme") {"is between 80% and 95% control limits "}, if (coo[["data"]][coo[["data"]]$name == tlhc_ccg,]$r > coo[["data"]][coo[["data"]]$name == tlhc_ccg,]$avg) {"at the upper end, "} else { "at the lower end, "}, if (coo[["data"]][coo[["data"]]$name == tlhc_ccg,]$rank == 1) { "and has the highest proportion of cumulative attended patients to cumulative accepted patients out of the TLHC CCGs.\n\n"} else {paste0("with ", coo[["data"]][coo[["data"]]$name == tlhc_ccg,]$rank - 1, " CCGs having a higher proportion of cumulative attended to cumulative accepted patients.\n\n")})`
+`r if (length(funnel_text[["extreme"]][["ccg"]]) > 0) paste0("The following CCGs are beyond 95% confidence limits:\n\n", pmap_chr(list(funnel_text[["extreme"]][["ccg"]], funnel_text[["extreme"]][["d"]], funnel_text[["extreme"]][["uplow"]]), ~ paste0(..1, " with ", ..2, " cumulative accepted patients, past the ", ..3, " boundaries.\n\n")) %>% paste0(collapse = ""))`
+`r if (length(funnel_text[["moderate"]][["ccg"]]) > 0) paste0("The following CCGs are beyond 95% confidence limits:\n\n", pmap_chr(list(funnel_text[["moderate"]][["ccg"]], funnel_text[["moderate"]][["d"]], funnel_text[["moderate"]][["uplow"]]), ~ paste0(..1, " with ", ..2, " cumulative accepted patients, past the ", ..3, " boundaries.\n\n")) %>% paste0(collapse = ""))`
+
+## Statistical Process Control charts
+
+```{r SPC charts, fig.width = 9, fig.height = 7, echo = F, warning = F, message = F}
+library(qicharts2)
+
+xoop <- qic(
+  y = x_list[["positive_scans_rate100"]][[tlhc_ccg]],
+  x = x_list[["positive_scans_rate100"]]$Month,
+  data  = x_list[["positive_scans_rate100"]] %>% select(Month, tlhc_ccg),
+  chart = "i",
+  title = tlhc_ccg,
+  ylab  = 'Rate of positive CT scans per 100\npatient population receiving CT scans',
+  xlab  = 'Week')
+
+
+       
+      use <- xoop[["data"]]
+      min_date <- use$x %>% min()
+      max_date <- use$x %>% max()
+       
+      use %>% ggplot(aes(x, y.sum)) +
+         geom_rect(
+           data = use[1, ],
+           aes(ymin = unique(use$lcl), ymax = unique(use$ucl)), 
+           xmin = -Inf,
+           xmax = Inf,
+           fill = "cadetblue3",
+           linetype = 0,
+           alpha = 0.5
+         ) +
+         geom_hline(yintercept = unique(use$ucl), colour = "cadetblue3") +
+         geom_hline(yintercept = unique(use$lcl), colour = "cadetblue3") +
+         geom_hline(yintercept = unique(use$cl), colour = "red", linetype = "dashed") +
+         geom_point(aes(colour = sigma.signal)) +
+         geom_line() +
+         annotate("text", label = "UCL", x = max(use$x), y = unique(use$ucl), hjust = -1.1) +
+         annotate("text", label = "LCL", x = max(use$x), y = unique(use$lcl), hjust = -1.25) +
+         annotate("text", label = "CL", x = max(use$x), y = unique(use$cl), hjust = -1.65) +
+         # scale_x_date(breaks = scales::pretty_breaks(15)) +
+         labs(y = "Rate of positive CT scans per 100\npatient population receiving CT scans",
+              x = "Week Ending",
+              title = tlhc_ccg) +
+         theme(
+           axis.text.x = element_text(angle = 45, hjust = 1),
+           legend.position = "none",
+           plot.margin = unit(c(0, 2, 0, 0), "cm")
+         ) +
+         coord_cartesian(clip = "off")
+```
