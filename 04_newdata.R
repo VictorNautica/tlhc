@@ -84,8 +84,8 @@ incidence_plot <- function(ccg_name) {
           colour = TLHC_CCG,
           alpha = TLHC_CCG
         )) +
-        geom_line(size = 1.1) +
-        geom_point() +
+        geom_line(size = 0.6) +
+        geom_point(size = 0.6) +
         labs(y = "Standardised Rate\nper 100,000") +
         scale_colour_manual(values = c("lightgrey", "#377eb8", "#e41a1c")) +
         scale_alpha_manual(values = c(0.5, 0.75, 1)) +
@@ -148,8 +148,8 @@ mortality_list <- imap(
     colour = TLHC_CCG,
     alpha = TLHC_CCG
   )) +
-  geom_line(size = 1.1) +
-  geom_point() +
+  geom_line(size = 0.6) +
+  geom_point(size = 0.6) +
   labs(y = "Standardised Rate\nper 100,000") +
   scale_colour_manual(values = c("lightgrey", "#377eb8", "#e41a1c")) +
   scale_alpha_manual(values = c(0.5, 0.75, 1)) +
@@ -213,12 +213,12 @@ ncras_stage <- ncras_stage %>% mutate_at(vars("TLHC_CCG"), fct_relevel, "Other T
 ncras_stage <- ncras_stage %>% arrange(TLHC_CCG)
 
 ncras_stage %>% ggplot(aes(`Financial Year and Quarter`, `Quarterly Proportion (%)`, group = CCG, colour = TLHC_CCG, alpha = TLHC_CCG)) + 
-  geom_point() +
-  geom_line() +
+  geom_point(size = 0.6) +
+  geom_line(size = 0.6) +
   scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
   scale_colour_manual(values = c("lightgrey", "#377eb8", "#e41a1c")) +
   scale_alpha_manual(values = c(0.5, 0.75, 1)) +
-  theme(legend.position = "top", 
+  theme(legend.position = "bottom", 
         legend.title = element_blank())
 
 }
@@ -258,8 +258,8 @@ validstage_dtt <- validstage_dtt %>% mutate_at(vars("TLHC_CCG"), fct_relevel, "O
 validstage_dtt <- validstage_dtt %>% arrange(TLHC_CCG)
 
 validstage_dtt %>% ggplot(aes(Reporting_Period, Indicator_Value, group = Level, colour = TLHC_CCG, alpha = TLHC_CCG)) + 
-  geom_point() +
-  geom_line() +
+  geom_point(size = 0.6) +
+  geom_line(size = 0.6) +
   scale_x_discrete(guide = guide_axis(n.dodge = 2)) +
   scale_colour_manual(values = c("lightgrey", "#377eb8", "#e41a1c")) +
   scale_alpha_manual(values = c(0.5, 0.75, 1)) +
@@ -377,8 +377,8 @@ cancer2ww %>% ggplot(
     colour = TLHC_CCG,
     alpha = TLHC_CCG
   )) +
-  geom_line() +
-  geom_point() +
+  geom_line(size = 0.6) +
+  geom_point(size = 0.6) +
   labs(y = "% seen within 2 weeks (all cancers)") +
   scale_colour_manual(values = c("lightgrey", "#377eb8", "#e41a1c")) +
   scale_alpha_manual(values = c(0.5, 0.75, 1)) +
@@ -413,14 +413,12 @@ use %>% ggplot(aes(x, y.sum)) +
   annotate("text", label = "LCL", x = max(use$x), y = unique(use$lcl), hjust = -1.25) +
   annotate("text", label = "CL", x = max(use$x), y = unique(use$cl), hjust = -1.65) +
   labs(y = "Percentage of Patients Seen Within Two Weeks",
-       x = "Month",
-       title = paste0(ccg_name, " CCG SPC chart")) +
+       x = "Month") +
   theme(
     axis.title.y = element_text(margin = margin(t = 0, r = 8, b = 0, l = 0)),
     text = element_text(size = 14),
     axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "none",
-    plot.margin = unit(c(0, 2, 0, 0), "cm")
+    legend.position = "none"
   ) +
   scale_y_continuous(labels = function(x) paste0(x, "%")) +
   coord_cartesian(clip = "off")

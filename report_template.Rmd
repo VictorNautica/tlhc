@@ -30,91 +30,119 @@ As of September 2023, `r patient_measurements %>% filter(CCG == tlhc_ccg) %>% pu
 
 ```{r foobar, echo = F}
 
-options(knitr.kable.NA = '')
-
-moo <-
-  patient_measurements %>% filter(CCG == tlhc_ccg) %>% select(
-    -ends_with("avg_height"),
-    -ends_with("avg_weight"),
-    -starts_with("bp"),
-    -invited,
-    -accepted,
-    -starts_with("ldct"),
-    -CCG
-  ) %>% select("attended",
-               "avg_Age",
-               "no_Men",
-               "no_Women",
-               "Median_IMD_rank",
-               everything()) %>%
-  pivot_longer(cols = everything(),
-               names_to = "Variable",
-               values_to = "Attended Patients")
-
-moo[moo$Variable == "attended", "Variable"] <- "No of attendees"
-moo[moo$Variable == "avg_Age", "Variable"] <- "Mean age"
-moo[moo$Variable == "Median_IMD_rank", "Variable"] <- "Median IMD rank"
-moo[moo$Variable == "no_Men", "Variable"] <- "No of men"
-moo[moo$Variable == "no_Women", "Variable"] <- "No of women"
-moo[moo$Variable == "men_bmi", "Variable"] <- "BMI of men"
-moo[moo$Variable == "women_bmi", "Variable"] <- "BMI of women"
-moo[moo$Variable == "PLCO", "Variable"] <- "Lung cancer risk (PLCO\\textsubscript{M2012})"
-
-attended_value <- moo %>% filter(Variable == "No of attendees") %>% pull("Attended Patients")
-
-moo <- moo %>% mutate(
-  groupings = case_when(
-    Variable %in% c("No of men", "No of women") ~ "Sex",
-    Variable %in% c(
-      "Less than 'O' level",
-      "'O' level",
-      "'A' level",
-      "University/college",
-      "University degree",
-      "Postgraduate/professional"
-    ) ~ "Education",
-    Variable %in% c("Current Smoker", "Former Smoker") ~ "SmokingStatus",
-    Variable %in% c("MRC_DS_1", "MRC_DS_2", "MRC_DS_3", "MRC_DS_4", "MRC_DS_5") ~ "MRCDyspnoeaScore",
-    Variable %in% c("PS_0", "PS_1", "PS_2", "PS_3", "PS_4") ~ "PerformanceStatus",
-    TRUE ~ Variable
-  )
-) %>% group_by(groupings) %>% mutate(pct = case_when(
-  n() > 1 ~ round(`Attended Patients` / sum(`Attended Patients`) * 100, 1),
-  Variable %in% c(
-    "Airflow obstruction, yes (%)",
-    "COPD/emphysema, yes (%)",
-    "FH lung cancer, yes (%)"
-  ) ~ round(`Attended Patients` / attended_value * 100, 1),
-  TRUE ~ NA_real_
-)) ## create pct
-
-moo <- moo %>% mutate_at(vars("Attended Patients"), prettyNum) %>%
-  mutate_at(vars("pct"), as.character) %>%
-  mutate_at(vars("pct"), ~str_c("(", ., ")")) %>%
-  unite(col = "Attended Patients", "Attended Patients", "pct", sep = " ") %>%
-  mutate_at(vars("Attended Patients"), str_replace_all, pattern = " NA", replacement = "") %>%
-  ungroup %>% select(-groupings) ## mutate pcts for relevant grouped vars
-
-moo_final <- left_join(moo, moo_complete, by = "Variable")
-
-rif <- function(x) which(moo_final$Variable == x)
-
-moo_final$Variable %<>% str_replace_all("~", "")
-moo_final$Variable %<>% str_replace_all("FEV1", "FEV\\\\textsubscript{1}")
-
-moo_final %>% kable(booktabs = T, format = "latex") %>%
-kable_styling(latex_options = "striped") %>%
-pack_rows("Sex (%)", rif("No of men"), rif("No of women")) %>%
-pack_rows("BMI", rif("BMI of men"), rif("BMI of women")) %>%
-pack_rows("Education (%)", rif("Less than 'O' level"), rif("Postgraduate/professional")) %>%
-pack_rows("Smoking status (%)", rif("Current Smoker"), rif("Former Smoker")) %>%
-pack_rows("Smoking exposure", rif("Duration (years)"), rif("Pack-years")) %>%
-pack_rows("Spirometry", rif("FEV\\textsubscript{1}"), rif("FEV\\textsubscript{1}:FVC ratio")) %>%
-pack_rows("MRC Dyspnoea Score (%)", rif("MRC_DS_1"), rif("MRC_DS_5")) %>%
-pack_rows("Performance status (%)", rif("PS_0"), rif("PS_4"))
+# options(knitr.kable.NA = '')
+# 
+# moo <-
+#   patient_measurements %>% filter(CCG == tlhc_ccg) %>% select(
+#     -ends_with("avg_height"),
+#     -ends_with("avg_weight"),
+#     -starts_with("bp"),
+#     -invited,
+#     -accepted,
+#     -starts_with("ldct"),
+#     -CCG
+#   ) %>% select("attended",
+#                "avg_Age",
+#                "no_Men",
+#                "no_Women",
+#                "Median_IMD_rank",
+#                everything()) %>%
+#   pivot_longer(cols = everything(),
+#                names_to = "Variable",
+#                values_to = "Attended Patients")
+# 
+# moo[moo$Variable == "attended", "Variable"] <- "No of attendees"
+# moo[moo$Variable == "avg_Age", "Variable"] <- "Mean age"
+# moo[moo$Variable == "Median_IMD_rank", "Variable"] <- "Median IMD rank"
+# moo[moo$Variable == "no_Men", "Variable"] <- "No of men"
+# moo[moo$Variable == "no_Women", "Variable"] <- "No of women"
+# moo[moo$Variable == "men_bmi", "Variable"] <- "BMI of men"
+# moo[moo$Variable == "women_bmi", "Variable"] <- "BMI of women"
+# moo[moo$Variable == "PLCO", "Variable"] <- "Lung cancer risk (PLCO\\textsubscript{M2012})"
+# 
+# attended_value <- moo %>% filter(Variable == "No of attendees") %>% pull("Attended Patients")
+# 
+# moo <- moo %>% mutate(
+#   groupings = case_when(
+#     Variable %in% c("No of men", "No of women") ~ "Sex",
+#     Variable %in% c(
+#       "Less than 'O' level",
+#       "'O' level",
+#       "'A' level",
+#       "University/college",
+#       "University degree",
+#       "Postgraduate/professional"
+#     ) ~ "Education",
+#     Variable %in% c("Current Smoker", "Former Smoker") ~ "SmokingStatus",
+#     Variable %in% c("MRC_DS_1", "MRC_DS_2", "MRC_DS_3", "MRC_DS_4", "MRC_DS_5") ~ "MRCDyspnoeaScore",
+#     Variable %in% c("PS_0", "PS_1", "PS_2", "PS_3", "PS_4") ~ "PerformanceStatus",
+#     TRUE ~ Variable
+#   )
+# ) %>% group_by(groupings) %>% mutate(pct = case_when(
+#   n() > 1 ~ round(`Attended Patients` / sum(`Attended Patients`) * 100, 1),
+#   Variable %in% c(
+#     "Airflow obstruction, yes (%)",
+#     "COPD/emphysema, yes (%)",
+#     "FH lung cancer, yes (%)"
+#   ) ~ round(`Attended Patients` / attended_value * 100, 1),
+#   TRUE ~ NA_real_
+# )) ## create pct
+# 
+# moo <- moo %>% mutate_at(vars("Attended Patients"), prettyNum) %>%
+#   mutate_at(vars("pct"), as.character) %>%
+#   mutate_at(vars("pct"), ~str_c("(", ., ")")) %>%
+#   unite(col = "Attended Patients", "Attended Patients", "pct", sep = " ") %>%
+#   mutate_at(vars("Attended Patients"), str_replace_all, pattern = " NA", replacement = "") %>%
+#   ungroup %>% select(-groupings) ## mutate pcts for relevant grouped vars
+# 
+# moo_final <- left_join(moo, moo_complete, by = "Variable")
+# 
+# rif <- function(x) which(moo_final$Variable == x)
+# 
+# moo_final$Variable %<>% str_replace_all("~", "")
+# moo_final$Variable %<>% str_replace_all("FEV1", "FEV\\\\textsubscript{1}")
+# 
+# moo_final %>% kable(booktabs = T, format = "latex") %>%
+# kable_styling(latex_options = "striped") %>%
+# pack_rows("Sex (%)", rif("No of men"), rif("No of women")) %>%
+# pack_rows("BMI", rif("BMI of men"), rif("BMI of women")) %>%
+# pack_rows("Education (%)", rif("Less than 'O' level"), rif("Postgraduate/professional")) %>%
+# pack_rows("Smoking status (%)", rif("Current Smoker"), rif("Former Smoker")) %>%
+# pack_rows("Smoking exposure", rif("Duration (years)"), rif("Pack-years")) %>%
+# pack_rows("Spirometry", rif("FEV\\textsubscript{1}"), rif("FEV\\textsubscript{1}:FVC ratio")) %>%
+# pack_rows("MRC Dyspnoea Score (%)", rif("MRC_DS_1"), rif("MRC_DS_5")) %>%
+# pack_rows("Performance status (%)", rif("PS_0"), rif("PS_4"))
 ```
 
 ## Yearly Incidence Rate per 100,000 persons (standardised by age and sex)
+
+```{r incidence, fig.width = 9, fig.height = 6, echo = F}
+incidence_plot(tlhc_ccg)
+```
+
+## Yearly Mortality Rate per 100,000 persons (standardised by age and sex)
+
+```{r mortality, fig.width = 9, fig.height = 6, echo = F}
+mortality_plot(tlhc_ccg)
+```
+
+## Yearly 1 Year Survival Rates
+
+```{r survival, fig.width = 9, fig.height = 6, echo = F}
+survival_func(tlhc_ccg)
+```
+
+## NCRAS Percentage of Lung Cancers Recorted at Early Stage (1/2) ####
+
+```{r early_stage, fig.width = 9, fig.height = 6, echo = F}
+stage_function(tlhc_ccg)
+```
+
+## SPC Chart - Percentage of Patients Seen Within 2 Weeks ####
+
+```{r 2ww, fig.width = 9, fig.height = 6, echo = F}
+twoweekwaitfunction(tlhc_ccg)
+```
 
 ## Monthly Figures of Accepted Invitations, Attended Acceptions, and Attended Invitations
 
