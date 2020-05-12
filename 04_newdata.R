@@ -319,28 +319,26 @@ one_yr_survival %>% ggplot(aes(`Diagnosis Year`, `Survival (%)`, group = `Geogra
 
 ## sitrep waiting list data (commissioner level) ####
 
-cancer2ww <- pull_from_sql("Sitreps", "Cancer_WL_2_Week_Wait_Comm_Mthly1")
-cancer2ww <- cancer2ww %>% select(Commissioner_Code, No_Of_Patients_Seen_Within_14_Days, No_Of_Patients_Seen_After_14_Days, Effective_Snapshot_Date)
+cancer_waiting_list_func <- function(schema, tablename, before, after, ccg_name, y_axis_label) {
+df <- pull_from_sql(schema, tablename)
+df <- df %>% select(Commissioner_Code, all_of(before), all_of(after), Effective_Snapshot_Date)
 
 
-cancer2ww <- bind_rows(
-  cancer2ww,
-  cancer2ww %>% group_by(Effective_Snapshot_Date) %>% summarise(
-    No_Of_Patients_Seen_Within_14_Days = sum(No_Of_Patients_Seen_Within_14_Days),
-    No_Of_Patients_Seen_After_14_Days = sum(No_Of_Patients_Seen_After_14_Days)
+df <- bind_rows(
+  df,
+  df %>% group_by(Effective_Snapshot_Date) %>% summarise(
+    before = sum(!!sym(before)),
+    after = sum(!!sym(after))
   ) %>% mutate(Commissioner_Code = "England")
 ) %>% arrange(Effective_Snapshot_Date)
 
 
-cancer2ww <- cancer2ww %>% filter(Commissioner_Code %in% c("England", ccg_codes)) %>% mutate(
-  pct_2ww = No_Of_Patients_Seen_Within_14_Days / (
-    No_Of_Patients_Seen_Within_14_Days + No_Of_Patients_Seen_After_14_Days
-  )*100)
+df <- df %>% filter(Commissioner_Code %in% c("England", ccg_codes)) %>% mutate(
+  pct_2ww = !!sym(before) / (!!sym(before) + !!sym(after))*100)
 
-cancer2ww <- cancer2ww %>% filter(Commissioner_Code %in% c("England", ccg_codes))
+df <- df %>% filter(Commissioner_Code %in% c("England", ccg_codes))
 
 
-twoweekwaitfunction <- function(ccg_name){
 if (ccg_name == "Mansfield and Ashfield with Corby") {
   selected_ccg_code <- c("04E", "03E")
 } else if (ccg_name == "Blackburn with Darwen with Blackpool") {
@@ -354,7 +352,7 @@ if (ccg_name == "Mansfield and Ashfield with Corby") {
 }
 
 
-cancer2ww <- cancer2ww %>% mutate(
+df <- df %>% mutate(
   TLHC_CCG = case_when(
     Commissioner_Code %in% c(
       ccg_codes[which(!ccg_codes %in% selected_ccg_code)]) ~ "Other TLHC",
@@ -363,38 +361,38 @@ cancer2ww <- cancer2ww %>% mutate(
     TRUE ~ "Other"
   )
 ) 
-cancer2ww <- cancer2ww %>% mutate_at(vars("TLHC_CCG"), as_factor)
-cancer2ww <- cancer2ww %>% mutate_at(vars("TLHC_CCG"), fct_relevel, "Other TLHC", "National", ccg_name)
-cancer2ww <- cancer2ww %>% arrange(TLHC_CCG)
-cancer2ww <- cancer2ww %>% mutate_at(vars("Effective_Snapshot_Date"),
+df <- df %>% mutate_at(vars("TLHC_CCG"), as_factor)
+df <- df %>% mutate_at(vars("TLHC_CCG"), fct_relevel, "Other TLHC", "National", ccg_name)
+df <- df %>% arrange(TLHC_CCG)
+df <- df %>% mutate_at(vars("Effective_Snapshot_Date"),
                                     function(x) as.POSIXlt(x, tz = "", format = "%Y-%m-%d") %>% zoo::as.yearmon())
 
-cancer2ww %>% ggplot(
-  aes(
-    Effective_Snapshot_Date,
-    pct_2ww,
-    group = Commissioner_Code,
-    colour = TLHC_CCG,
-    alpha = TLHC_CCG
-  )) +
-  geom_line(size = 0.6) +
-  geom_point(size = 0.6) +
-  labs(y = "% seen within 2 weeks (all cancers)") +
-  scale_colour_manual(values = c("lightgrey", "#377eb8", "#e41a1c")) +
-  scale_alpha_manual(values = c(0.5, 0.75, 1)) +
-  theme(legend.position = "top", 
-        legend.title = element_blank())
+# cancer2ww %>% ggplot(
+#   aes(
+#     Effective_Snapshot_Date,
+#     pct_2ww,
+#     group = Commissioner_Code,
+#     colour = TLHC_CCG,
+#     alpha = TLHC_CCG
+#   )) +
+#   geom_line(size = 0.6) +
+#   geom_point(size = 0.6) +
+#   labs(y = "% seen within 2 weeks (all cancers)") +
+#   scale_colour_manual(values = c("lightgrey", "#377eb8", "#e41a1c")) +
+#   scale_alpha_manual(values = c(0.5, 0.75, 1)) +
+#   theme(legend.position = "top", 
+#         legend.title = element_blank())
 
 qic_chart <- qicharts2::qic(
   y = pct_2ww,
   x = Effective_Snapshot_Date,
-  data  = cancer2ww %>% filter(TLHC_CCG == ccg_name),
+  data  = df %>% filter(TLHC_CCG == ccg_name),
   chart = "i"
 )
 
 use <- qic_chart[["data"]]
 
-use %>% ggplot(aes(x, y.sum)) +
+plot <- use %>% ggplot(aes(x, y.sum)) +
   geom_rect(
     data = use[1, ],
     aes(ymin = unique(use$lcl), ymax = unique(use$ucl)), 
@@ -412,7 +410,7 @@ use %>% ggplot(aes(x, y.sum)) +
   annotate("text", label = "UCL", x = max(use$x), y = unique(use$ucl), hjust = -1.1) +
   annotate("text", label = "LCL", x = max(use$x), y = unique(use$lcl), hjust = -1.25) +
   annotate("text", label = "CL", x = max(use$x), y = unique(use$cl), hjust = -1.65) +
-  labs(y = "Percentage of Patients Seen Within Two Weeks",
+  labs(y = y_axis_label,
        x = "Month") +
   theme(
     axis.title.y = element_text(margin = margin(t = 0, r = 8, b = 0, l = 0)),
@@ -422,4 +420,18 @@ use %>% ggplot(aes(x, y.sum)) +
   ) +
   scale_y_continuous(labels = function(x) paste0(x, "%")) +
   coord_cartesian(clip = "off")
+
+return(plot)
+
 }
+
+# cancer_waiting_list_func("Sitreps", "Cancer_WL_2_Week_Wait_Comm_Mthly1", "No_Of_Patients_Seen_Within_14_Days", "No_Of_Patients_Seen_After_14_Days", "Southampton", "% of Patients Seen\nWithin Two Weeks") ## example
+
+cancer_waiting_list_func(
+  "Sitreps",
+  "Cancer_WL_2_Week_Wait_Comm_Mthly1",
+  "No_Of_Patients_Seen_Within_14_Days",
+  "No_Of_Patients_Seen_After_14_Days",
+  "Southampton",
+  "% of Patients Receiving First Treatment\nWithin 31 Days"
+)
